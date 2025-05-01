@@ -42,9 +42,15 @@ class TaskType(Enum):
     SEQUENCE_CLASSIFICATION = 2,
     QUESTION_ANSWERING = 3,
     MULTIPLE_CHOICE = 4,
-
+# 模型修改： 模型类选择
 PREFIX_MODELS = {
     "bert": {
+        TaskType.TOKEN_CLASSIFICATION: BertPrefixForTokenClassification,
+        TaskType.SEQUENCE_CLASSIFICATION: BertPrefixForSequenceClassification,
+        TaskType.QUESTION_ANSWERING: BertPrefixForQuestionAnswering,
+        TaskType.MULTIPLE_CHOICE: BertPrefixForMultipleChoice,
+    },
+    "bert-base": {
         TaskType.TOKEN_CLASSIFICATION: BertPrefixForTokenClassification,
         TaskType.SEQUENCE_CLASSIFICATION: BertPrefixForSequenceClassification,
         TaskType.QUESTION_ANSWERING: BertPrefixForQuestionAnswering,
@@ -72,6 +78,10 @@ PREFIX_MODELS = {
 
 PROMPT_MODELS = {
     "bert": {
+        TaskType.SEQUENCE_CLASSIFICATION: BertPromptForSequenceClassification,
+        TaskType.MULTIPLE_CHOICE: BertPromptForMultipleChoice
+    },
+    "bert-base": {
         TaskType.SEQUENCE_CLASSIFICATION: BertPromptForSequenceClassification,
         TaskType.MULTIPLE_CHOICE: BertPromptForMultipleChoice
     },
@@ -120,6 +130,11 @@ def get_model(model_args, task_type: TaskType, config: AutoConfig, fix_bert: boo
         bert_param = 0
         if fix_bert:
             if config.model_type == "bert":
+                for param in model.bert.parameters():
+                    param.requires_grad = False
+                for _, param in model.bert.named_parameters():
+                    bert_param += param.numel()
+            elif config.model_type == "bert-base":
                 for param in model.bert.parameters():
                     param.requires_grad = False
                 for _, param in model.bert.named_parameters():

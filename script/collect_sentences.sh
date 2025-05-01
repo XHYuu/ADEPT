@@ -6,8 +6,12 @@ block_size=128
 
 if [ $model_type == 'bert' ]; then
     model_name_or_path=bert-large-uncased
+elif [ $model_type == 'bert-base' ]; then
+    model_name_or_path=bert-base-uncased
 elif [ $model_type == 'roberta' ]; then
     model_name_or_path=roberta-large
+elif [ $model_type == 'llama' ]; then
+    model_name_or_path=llama
 fi
 
 if [ $bias == 'gender' ]; then

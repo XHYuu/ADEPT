@@ -10,8 +10,12 @@ seed=42
 
 if [ $model_type == 'bert' ]; then
     model_name_or_path=bert-large-uncased
+elif [ $model_type == 'bert-base' ]; then
+    model_name_or_path=bert-base-uncased
 elif [ $model_type == 'roberta' ]; then
     model_name_or_path=roberta-large
+elif [ $model_type == 'llama' ]; then
+    model_name_or_path=llama
 fi
 
 TRAIN_DATA=../sentences_collection/$model_name_or_path/$bias/$ab_test_type/data.bin

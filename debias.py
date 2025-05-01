@@ -19,7 +19,6 @@ GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while B
 using a masked language modeling (MLM) loss.
 """
 
-
 import argparse
 import logging
 import os
@@ -38,7 +37,7 @@ from tqdm import tqdm, trange
 
 from model.utils import get_model, TaskType
 from arguments import get_args
-from distance import  KL_divergence, calculate_group_to_one_relative_distance_asymmetric, JS_divergence
+from distance import KL_divergence, calculate_group_to_one_relative_distance_asymmetric, JS_divergence
 
 from transformers import (
     AutoConfig,
@@ -57,6 +56,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 timestr = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime(time.time()))
 
+
 class LineByLineTextDataset(Dataset):
     def __init__(self, examples: list, labels: list):
         self.examples = examples
@@ -71,6 +71,7 @@ class LineByLineTextDataset(Dataset):
         else:
             return torch.tensor(self.examples[i], dtype=torch.long)
 
+
 def create_dataset(data, dataset):
     d = dict()
     for key in data['example'].keys():
@@ -81,10 +82,12 @@ def create_dataset(data, dataset):
 
     return d
 
+
 def load_and_cache_examples(data, args, tokenizer):
     train_dataset = create_dataset(data['train'], LineByLineTextDataset)
     dev_dataset = create_dataset(data['dev'], LineByLineTextDataset)
     return {'train': train_dataset, 'dev': dev_dataset}
+
 
 def split_data(attributes_examples, attributes_labels, neutral_examples, neutral_labels, args):
     data = {'train': {'example': {}, 'label': {}}, 'dev': {'example': {}, 'label': {}}}
@@ -111,12 +114,14 @@ def split_data(attributes_examples, attributes_labels, neutral_examples, neutral
 
     return data
 
+
 def set_seed(args):
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     if args.n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
+
 
 def create_dataloader(args, datasets, tokenizer, train=False):
     def collate(batch: List[torch.Tensor]):
@@ -144,15 +149,19 @@ def create_dataloader(args, datasets, tokenizer, train=False):
     for key, dataset in datasets.items():
         example_num += len(dataset)
         if train:
-            dataloaders[key] = iter(DataLoader(dataset, batch_size=args.train_batch_size, collate_fn=collate, shuffle=True))
+            dataloaders[key] = iter(
+                DataLoader(dataset, batch_size=args.train_batch_size, collate_fn=collate, shuffle=True))
             data_distribution += [key for _ in range(int(min_size / args.train_batch_size))]
         else:
-            dataloaders[key] = iter(DataLoader(dataset, batch_size=args.eval_batch_size, collate_fn=collate , shuffle=False))
+            dataloaders[key] = iter(
+                DataLoader(dataset, batch_size=args.eval_batch_size, collate_fn=collate, shuffle=False))
             data_distribution += [key for _ in range(int(min_size / args.eval_batch_size))]
 
     return dataloaders, example_num, data_distribution
 
-def train(args, data, datasets, model: PreTrainedModel, original_model, tokenizer: PreTrainedTokenizer) -> Tuple[int, float]:
+
+def train(args, data, datasets, model: PreTrainedModel, original_model, tokenizer: PreTrainedTokenizer) -> Tuple[
+    int, float]:
     """Train the model"""
     if args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter()
@@ -163,7 +172,8 @@ def train(args, data, datasets, model: PreTrainedModel, original_model, tokenize
     train_datasets = datasets['train']
     dev_datasets = datasets['dev']
 
-    train_dataloaders, train_example_num, train_distribution = create_dataloader(args, train_datasets, tokenizer, train=True)
+    train_dataloaders, train_example_num, train_distribution = create_dataloader(args, train_datasets, tokenizer,
+                                                                                 train=True)
     dev_dataloaders, dev_example_num, dev_distribution = create_dataloader(args, dev_datasets, tokenizer, train=False)
 
     train_iter_num = sum([len(dataloader) for dataloader in train_dataloaders.values()])
@@ -177,7 +187,8 @@ def train(args, data, datasets, model: PreTrainedModel, original_model, tokenize
     model = model.module if hasattr(model, "module") else model  # Take care of distributed/parallel training
     model.resize_token_embeddings(len(tokenizer))
 
-    original_model = original_model.module if hasattr(original_model, "module") else original_model  # Take care of distributed/parallel training
+    original_model = original_model.module if hasattr(original_model,
+                                                      "module") else original_model  # Take care of distributed/parallel training
     original_model.resize_token_embeddings(len(tokenizer))
 
     # Prepare optimizer and scheduler (linear warmup and decay)
@@ -196,9 +207,9 @@ def train(args, data, datasets, model: PreTrainedModel, original_model, tokenize
 
     # Check if saved optimizer or scheduler states exist
     if (
-        args.model_name_or_path
-        and os.path.isfile(os.path.join(args.model_name_or_path, "optimizer.pt"))
-        and os.path.isfile(os.path.join(args.model_name_or_path, "scheduler.pt"))
+            args.model_name_or_path
+            and os.path.isfile(os.path.join(args.model_name_or_path, "optimizer.pt"))
+            and os.path.isfile(os.path.join(args.model_name_or_path, "scheduler.pt"))
     ):
         # Load in optimizer and scheduler states
         optimizer.load_state_dict(torch.load(os.path.join(args.model_name_or_path, "optimizer.pt")))
@@ -258,7 +269,6 @@ def train(args, data, datasets, model: PreTrainedModel, original_model, tokenize
         except ValueError:
             logger.info("Starting prompt-tuning.")
 
-
     model.zero_grad()
     original_model.zero_grad()
     train_iterator = trange(
@@ -301,6 +311,7 @@ def train(args, data, datasets, model: PreTrainedModel, original_model, tokenize
 
     def get_hiddens_of_model(input, input_attention_mask):
         model.zero_grad()
+        # 模型修改： 改隐藏层部分
         if args.model_type == 'roberta':
             if args.algorithm == 'ADEPT':
                 hiddens = model(input, input_attention_mask).hidden_states
@@ -311,7 +322,11 @@ def train(args, data, datasets, model: PreTrainedModel, original_model, tokenize
                 hiddens = model(input, input_attention_mask).hidden_states
             elif args.algorithm == 'ADEPT-finetuning' or args.algorithm == 'DPCE':
                 hiddens = model.bert(input).hidden_states
-
+        elif args.model_type == 'bert-base':
+            if args.algorithm == 'ADEPT':
+                hiddens = model(input, input_attention_mask).hidden_states
+            elif args.algorithm == 'ADEPT-finetuning' or args.algorithm == 'DPCE':
+                hiddens = model.bert(input).hidden_states
         return hiddens
 
     def attribute_vector_example():
@@ -343,7 +358,8 @@ def train(args, data, datasets, model: PreTrainedModel, original_model, tokenize
 
         attribute_size = len(data['train']['example'])
         for i in range(attribute_size - 1):
-            attributes_hiddens[f'attribute{i}'] = torch.mean(torch.cat(attributes_hiddens[f'attribute{i}'], 0), 0).detach().unsqueeze(0)
+            attributes_hiddens[f'attribute{i}'] = torch.mean(torch.cat(attributes_hiddens[f'attribute{i}'], 0),
+                                                             0).detach().unsqueeze(0)
 
         return attributes_hiddens
 
@@ -359,12 +375,13 @@ def train(args, data, datasets, model: PreTrainedModel, original_model, tokenize
             labels_attention_mask = None
         inputs = inputs.to(args.device)
         inputs_attention_mask = inputs_attention_mask.to(args.device)
+        # 模型修改
         if args.model_type == 'roberta':
             all_layer_hiddens = model(inputs, inputs_attention_mask).hidden_states
             if 'neutral' != key:
                 with torch.no_grad():
                     all_layer_original_hiddens = original_model(inputs, inputs_attention_mask).hidden_states
-        elif args.model_type == 'bert':
+        elif args.model_type == 'bert' or args.model_type == 'bert-base':
             all_layer_hiddens = model(inputs, inputs_attention_mask).hidden_states
             if 'neutral' != key:
                 with torch.no_grad():
@@ -372,7 +389,7 @@ def train(args, data, datasets, model: PreTrainedModel, original_model, tokenize
 
         all_layer_hiddens = torch.stack(all_layer_hiddens, 2)
         if 'neutral' != key:
-            all_original_hiddens =  torch.stack(all_layer_original_hiddens, 2)
+            all_original_hiddens = torch.stack(all_layer_original_hiddens, 2)
             all_original_hiddens = all_original_hiddens.detach()
         if args.debias_layer == 'all':
             target_layer_hiddens = all_layer_hiddens
@@ -382,27 +399,36 @@ def train(args, data, datasets, model: PreTrainedModel, original_model, tokenize
                 idx = 0
             elif args.debias_layer == 'last':
                 idx = -1
-            target_layer_hiddens = all_layer_hiddens[:,:,idx]
+            target_layer_hiddens = all_layer_hiddens[:, :, idx]
             target_layer_hiddens = target_layer_hiddens.unsqueeze(2)
             if 'neutral' != key:
-                target_original_hiddens = all_original_hiddens[:,:,idx]
+                target_original_hiddens = all_original_hiddens[:, :, idx]
                 target_original_hiddens = target_original_hiddens.unsqueeze(2)
             else:
-                attributes_hiddens = {key: value[:,idx,:].unsqueeze(1) for key, value in attributes_hiddens.items()}
+                attributes_hiddens = {key: value[:, idx, :].unsqueeze(1) for key, value in attributes_hiddens.items()}
 
         if args.loss_target == 'sentence' or labels is None:
             attributes_hiddens = {key: value.unsqueeze(1) for key, value in attributes_hiddens.items()}
-        #elif args.loss_target == 'token' and key == 'neutral':
+        # elif args.loss_target == 'token' and key == 'neutral':
         elif args.loss_target == 'token':
             if labels.size(1) > 1:
                 onehot = torch.eye(target_layer_hiddens.size(1))
-                zeros = torch.zeros(1, onehot.size(0))
+                onehot = onehot.to(args.device)
+                zeros = torch.zeros(1, onehot.size(0)).to(args.device)
                 onehot = torch.cat((zeros, onehot), 0)
                 onehot = onehot[labels]
                 onehot = torch.sum(onehot, 1)
                 onehot = onehot.view(target_layer_hiddens.size(0), -1, 1, 1)
+                # onehot = torch.eye(target_layer_hiddens.size(1))
+                # zeros = torch.zeros(1, onehot.size(0))
+                # onehot = torch.cat((zeros, onehot), 0)
+                # onehot = onehot[labels]
+                # onehot = torch.sum(onehot, 1)
+                # onehot = onehot.view(target_layer_hiddens.size(0), -1, 1, 1)
             else:
-                onehot = torch.eye(target_layer_hiddens.size(1))[labels].view(target_layer_hiddens.size(0), -1, 1, 1)
+                # onehot = torch.eye(target_layer_hiddens.size(1))[labels].view(target_layer_hiddens.size(0), -1, 1, 1)
+                onehot = torch.eye(target_layer_hiddens.size(1), device=labels.device)[labels].view(
+                    target_layer_hiddens.size(0), -1, 1, 1)
             onehot = onehot.to(args.device)
             target_layer_hiddens = torch.sum(target_layer_hiddens * onehot, 1).unsqueeze(1) / labels.size(1)
             if 'neutral' != key:
@@ -412,14 +438,15 @@ def train(args, data, datasets, model: PreTrainedModel, original_model, tokenize
                     attributes_hiddens = torch.cat(list(attributes_hiddens.values()), dim=0)
                 elif args.algorithm == 'DPCE':
                     attributes_hiddens = {key: value.expand(target_layer_hiddens.size(0),
-                                                        1,
-                                                        value.size(1),
-                                                        value.size(2))
-                                      for key, value in attributes_hiddens.items()}
+                                                            1,
+                                                            value.size(1),
+                                                            value.size(2))
+                                          for key, value in attributes_hiddens.items()}
         if args.algorithm == 'ADEPT' or args.algorithm == 'ADEPT-finetuning':
             loss = 0
             if 'neutral' == key:
-                relative_distance = calculate_group_to_one_relative_distance_asymmetric(target_layer_hiddens, attributes_hiddens)
+                relative_distance = calculate_group_to_one_relative_distance_asymmetric(target_layer_hiddens,
+                                                                                        attributes_hiddens)
                 relative_distance_shape0 = relative_distance.shape[0]
                 for i in range(relative_distance_shape0):
                     for j in range(i + 1, relative_distance_shape0):
@@ -470,7 +497,7 @@ def train(args, data, datasets, model: PreTrainedModel, original_model, tokenize
         logger.info("Batch size = %d", args.eval_batch_size)
         eval_loss = 0.0
         model.eval()
-        #criterion.eval()
+        # criterion.eval()
 
         for key in tqdm(dev_distribution):
             with torch.no_grad():
@@ -540,12 +567,14 @@ def train(args, data, datasets, model: PreTrainedModel, original_model, tokenize
                     train_loss = 0.0
                     # Log metrics
                     best_loss, best_step = save_best_model(best_loss, best_step, dev_dataloaders)
-                    dev_dataloaders, dev_example_num, dev_distribution = create_dataloader(args, dev_datasets, tokenizer, train=False)
+                    dev_dataloaders, dev_example_num, dev_distribution = create_dataloader(args, dev_datasets,
+                                                                                           tokenizer, train=False)
 
             if args.max_steps > 0 and global_step > args.max_steps:
                 epoch_iterator.close()
                 break
-            train_dataloaders, train_example_num, train_distribution = create_dataloader(args, train_datasets, tokenizer, train=True)
+            train_dataloaders, train_example_num, train_distribution = create_dataloader(args, train_datasets,
+                                                                                         tokenizer, train=True)
 
         if args.max_steps > 0 and global_step > args.max_steps:
             train_iterator.close()
@@ -556,6 +585,7 @@ def train(args, data, datasets, model: PreTrainedModel, original_model, tokenize
 
     if args.local_rank in [-1, 0]:
         tb_writer.close()
+
 
 def main():
     model_args, args = get_args()
@@ -595,10 +625,13 @@ def main():
     if args.local_rank not in [-1, 0]:
         torch.distributed.barrier()  # Barrier to make sure only the first process in distributed training download model & vocab
 
+    # 模型修改：从本地或仓库的配置文件加载模型配置
     if model_args.config_name:
-        config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir, revision=model_args.model_revision)
+        config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir,
+                                            revision=model_args.model_revision)
     elif model_args.model_name_or_path:
-        config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir, revision=model_args.model_revision)
+        config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir,
+                                            revision=model_args.model_revision)
     else:
         # When we release a pip version exposing CONFIG_MAPPING,
         # we can do `config = CONFIG_MAPPING[args.model_type]()`.
@@ -609,6 +642,7 @@ def main():
 
     config.output_hidden_states = 'true'
 
+    # 模型修改：从本地或仓库 加载分词器Tokenizer
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, cache_dir=model_args.cache_dir)
     elif model_args.model_name_or_path:
@@ -624,7 +658,7 @@ def main():
         # Our input block size will be the max possible for the model
     else:
         try:
-            args.block_size = min(args.block_size, tokenizer.model_max_length)
+            args.block_size = min(args.block_size, tokenizer.model_max_length)  # 标记文本的最大 token 长度
         except:
             args.block_size = min(args.block_size, tokenizer.max_len)
 
@@ -646,7 +680,6 @@ def main():
         )
     else:
         raise ValueError()
-        
 
     # GPT-2 and GPT do not have pad.
     if tokenizer.pad_token is None:

@@ -2,13 +2,14 @@ import argparse
 import regex as re
 import nltk
 import torch
-from transformers import BertTokenizer, RobertaTokenizer
+from transformers import BertTokenizer, RobertaTokenizer, AutoTokenizer
 import random
 from tqdm import tqdm
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
-    tp = lambda x:list(x.split(','))
+    tp = lambda x: list(x.split(','))
 
     parser.add_argument('--input', type=str, required=True,
                         help='Data')
@@ -16,30 +17,41 @@ def parse_args():
     parser.add_argument('--attribute_words', type=tp, required=True)
     parser.add_argument('--output', type=str, required=True)
     parser.add_argument('--block_size', type=int, default=128)
+    # 模型修改： 改choices
     parser.add_argument('--model_type', type=str, required=True,
-                        choices=['bert', 'roberta'])
+                        choices=['bert', 'roberta', 'bert-base', 'llama'])
     parser.add_argument('--ab_test_type', type=str, default='final',
-                        choices=['raw', 'reliability', 'quality', 'quantity-100', 'quantity-1000', 'quantity-10000', 'final'])
+                        choices=['raw', 'reliability', 'quality', 'quantity-100', 'quantity-1000', 'quantity-10000',
+                                 'final'])
 
     args = parser.parse_args()
 
     return args
 
+
 def prepare_tokenizer(args):
+    # 模型修改：改分词器
     if args.model_type == 'bert':
         pretrained_weights = 'bert-large-uncased'
+        tokenizer = BertTokenizer.from_pretrained(pretrained_weights)
+    elif args.model_type == 'bert-base':
+        pretrained_weights = 'bert-base-uncased'
         tokenizer = BertTokenizer.from_pretrained(pretrained_weights)
     elif args.model_type == 'roberta':
         pretrained_weights = 'roberta-large'
         tokenizer = RobertaTokenizer.from_pretrained(pretrained_weights)
+    elif args.model_type == 'llama':
+        pretrained_weights = 'F:\GitHub\ADEPT\llama'
+        tokenizer = AutoTokenizer.from_pretrained(pretrained_weights)
     return tokenizer
+
 
 def main(args):
     SUPERVISED_ENTITIES = []
     supervised_entities = [w.lower() for w in SUPERVISED_ENTITIES]
     entity_count = {}
 
-    data = [l.strip() for l in open(args.input)]
+    data = [l.strip() for l in open(args.input, encoding='utf-8')]
     if args.neutral_words:
         neutrals = [word.strip() for word in open(args.neutral_words)]
         neutral_set = set(neutrals)
@@ -193,6 +205,7 @@ def main(args):
         data['neutral_labels'] = neutral_labels
 
     torch.save(data, args.output + '/data.bin')
+
 
 if __name__ == "__main__":
     args = parse_args()
